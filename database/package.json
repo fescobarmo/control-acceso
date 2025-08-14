@@ -1,0 +1,30 @@
+{
+  "name": "controlacceso-database",
+  "version": "1.0.0",
+  "description": "Scripts de base de datos para el sistema ControlAcceso",
+  "main": "init-db.js",
+  "scripts": {
+    "setup": "node setup-postgres.js",
+    "init": "node init-db.js",
+    "init-simple": "node init-simple.js",
+    "test": "node test-db.js",
+    "reset": "node reset-db.js",
+    "backup": "node backup-db.js"
+  },
+  "keywords": [
+    "postgresql",
+    "database",
+    "control-acceso",
+    "security"
+  ],
+  "author": "ControlAcceso Team",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,240 @@
+# ========================================
+# DOCKER COMPOSE OVERRIDE - MÚLTIPLES ENTORNOS
+# ========================================
+# Este archivo permite levantar simultáneamente los tres entornos:
+# - Desarrollo (dev): puertos 3001 (backend) y 3000 (frontend)
+# - Pruebas (test): puertos 3002 (backend) y 3003 (frontend)
+# - Producción (prod): puertos 3003 (backend) y 3004 (frontend)
+#
+# USO:
+# docker compose -f docker-compose.override.yml up
+# docker compose -f docker-compose.override.yml up -d
+# docker compose -f docker-compose.override.yml down
+
+version: '3.8'
+
+services:
+  # ========================================
+  # BASES DE DATOS PARA CADA ENTORNO
+  # ========================================
+  
+  # Base de datos para desarrollo
+  database-dev:
+    image: postgres:15-alpine
+    container_name: controlacceso_db_dev
+    environment:
+      POSTGRES_DB: controlacceso_dev
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    networks:
+      - controlacceso_network
+
+  # Base de datos para pruebas
+  database-test:
+    image: postgres:15-alpine
+    container_name: controlacceso_db_test
+    environment:
+      POSTGRES_DB: controlacceso_test
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_test:/var/lib/postgresql/data
+    networks:
+      - controlacceso_network
+
+  # Base de datos para producción
+  database-prod:
+    image: postgres:15-alpine
+    container_name: controlacceso_db_prod
+    environment:
+      POSTGRES_DB: controlacceso_prod
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    networks:
+      - controlacceso_network
+
+  # ========================================
+  # BACKENDS PARA CADA ENTORNO
+  # ========================================
+  
+  # Backend para desarrollo
+  backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: controlacceso_backend_dev
+    environment:
+      NODE_ENV: development
+      DB_HOST: database-dev
+      DB_PORT: 5432
+      DB_NAME: controlacceso_dev
+      DB_USER: admin
+      DB_PASSWORD: admin123
+      PORT: 3001
+      JWT_SECRET: dev_jwt_secret_super_seguro_aqui_para_desarrollo
+      FRONTEND_URL: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3000
+      LOG_LEVEL: debug
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - database-dev
+    networks:
+      - controlacceso_network
+    command: npm run dev
+
+  # Backend para pruebas
+  backend-test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: controlacceso_backend_test
+    environment:
+      NODE_ENV: test
+      DB_HOST: database-test
+      DB_PORT: 5432
+      DB_NAME: controlacceso_test
+      DB_USER: admin
+      DB_PASSWORD: admin123
+      PORT: 3002
+      JWT_SECRET: test_jwt_secret_super_seguro_aqui_para_pruebas
+      FRONTEND_URL: http://localhost:3003
+      CORS_ORIGIN: http://localhost:3003
+      LOG_LEVEL: warn
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - database-test
+    networks:
+      - controlacceso_network
+    command: npm run test-env
+
+  # Backend para producción
+  backend-prod:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: controlacceso_backend_prod
+    environment:
+      NODE_ENV: production
+      DB_HOST: database-prod
+      DB_PORT: 5432
+      DB_NAME: controlacceso_prod
+      DB_USER: admin
+      DB_PASSWORD: admin123
+      PORT: 3003
+      JWT_SECRET: prod_jwt_secret_super_seguro_aqui_para_produccion
+      FRONTEND_URL: http://localhost:3004
+      CORS_ORIGIN: http://localhost:3004
+      LOG_LEVEL: error
+    ports:
+      - "3003:3003"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - database-prod
+    networks:
+      - controlacceso_network
+    command: npm run prod
+
+  # ========================================
+  # FRONTENDS PARA CADA ENTORNO
+  # ========================================
+  
+  # Frontend para desarrollo
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: controlacceso_frontend_dev
+    environment:
+      REACT_APP_ENV: development
+      REACT_APP_API_URL: http://localhost:3001/api
+      REACT_APP_DEBUG: true
+      REACT_APP_ENABLE_LOGS: true
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend-dev
+    networks:
+      - controlacceso_network
+    command: npm run start:dev
+
+  # Frontend para pruebas
+  frontend-test:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: controlacceso_frontend_test
+    environment:
+      REACT_APP_ENV: test
+      REACT_APP_API_URL: http://localhost:3002/api
+      REACT_APP_DEBUG: false
+      REACT_APP_ENABLE_LOGS: false
+    ports:
+      - "3003:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend-test
+    networks:
+      - controlacceso_network
+    command: npm run start:test
+
+  # Frontend para producción
+  frontend-prod:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: controlacceso_frontend_prod
+    environment:
+      REACT_APP_ENV: production
+      REACT_APP_API_URL: http://localhost:3003/api
+      REACT_APP_DEBUG: false
+      REACT_APP_ENABLE_LOGS: false
+    ports:
+      - "3004:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend-prod
+    networks:
+      - controlacceso_network
+    command: npm run start:prod
+
+# ========================================
+# VOLÚMENES PARA CADA ENTORNO
+# ========================================
+volumes:
+  postgres_data_dev:
+  postgres_data_test:
+  postgres_data_prod:
+
+# ========================================
+# REDES
+# ========================================
+networks:
+  controlacceso_network:
+    driver: bridge

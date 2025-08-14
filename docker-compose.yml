@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # Base de datos
+  database:
+    image: postgres:15-alpine
+    container_name: controlacceso_db
+    environment:
+      POSTGRES_DB: controlacceso
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - controlacceso_network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: controlacceso_backend
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://admin:password123@database:5432/controlacceso
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - database
+    networks:
+      - controlacceso_network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: controlacceso_frontend
+    environment:
+      REACT_APP_API_URL: http://localhost:3001
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - controlacceso_network
+
+volumes:
+  postgres_data:
+
+networks:
+  controlacceso_network:
+    driver: bridge
+
+
+
+
+

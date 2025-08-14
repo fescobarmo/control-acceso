@@ -1,0 +1,399 @@
+================================================================================
+                    FLUJO COMPLETO DE REGISTRO DE RESIDENTE
+                    Sistema de Control de Acceso
+================================================================================
+
+1. FRONTEND - INTERFAZ DE USUARIO
+================================================================================
+
+1.1 PANTALLAS Y COMPONENTES INTERVINIENTES:
+
+A) Página Principal de Residentes (Residentes.js)
+   - Ubicación: /frontend/src/components/residentes/Residentes.js
+   - Función: Lista todos los residentes registrados con estadísticas
+   - Elementos principales:
+     * 4 tarjetas de estadísticas (Total, Activos, Propietarios, Inquilinos)
+     * Filtros de búsqueda, estado y tipo de residente
+     * Tabla con paginación de residentes existentes
+     * Botón "Nuevo Residente" que abre el modal de registro
+
+B) Modal de Registro/Edición (Dialog en Residentes.js)
+   - Función: Formulario completo para crear o editar residentes
+   - Secciones del formulario:
+     * Información Personal (nombre, apellidos, documento, email, teléfono, etc.)
+     * Información del Departamento (número, piso)
+     * Información del Vehículo (marca, modelo, color, placa)
+     * Estado y Observaciones
+
+1.2 ORDEN DE EJECUCIÓN EN FRONTEND:
+
+1. Usuario accede a la página de residentes (/residentes)
+2. Sistema carga automáticamente:
+   - Lista de residentes existentes
+   - Estadísticas actualizadas
+3. Usuario hace clic en "Nuevo Residente"
+4. Se abre el modal con formulario vacío
+5. Usuario completa los campos requeridos:
+   - Nombre (obligatorio)
+   - Apellido Paterno (obligatorio)
+   - Número de Documento (obligatorio)
+   - Departamento (obligatorio)
+   - Otros campos opcionales
+6. Sistema valida campos en tiempo real
+7. Usuario hace clic en "Crear Residente"
+8. Sistema envía datos al backend
+
+1.3 VALIDACIONES EN FRONTEND:
+
+- Campos obligatorios: nombre, apellido_paterno, documento, departamento
+- Validación de formato de email
+- Validación de longitud de campos
+- Validación de tipos de datos (fechas, números)
+- Verificación de que el formulario esté completo antes de enviar
+
+================================================================================
+
+2. COMUNICACIÓN FRONTEND-BACKEND
+================================================================================
+
+2.1 MÉTODO HTTP Y ENDPOINT:
+
+- Método: POST
+- Endpoint: /api/residentes
+- URL completa: http://localhost:3001/api/residentes
+
+2.2 CABECERAS HTTP:
+
+```
+Content-Type: application/json
+Authorization: Bearer <JWT_TOKEN>
+Accept: application/json
+```
+
+2.3 ESTRUCTURA DE DATOS ENVIADOS:
+
+```json
+{
+  "nombre": "Juan Carlos",
+  "apellido_paterno": "García",
+  "apellido_materno": "López",
+  "documento": "12345678",
+  "tipo_documento": "DNI",
+  "email": "juan.garcia@email.com",
+  "telefono": "999888777",
+  "departamento": "101",
+  "piso": "1",
+  "tipo_residente": "propietario",
+  "fecha_nacimiento": "1985-03-15",
+  "ocupacion": "Ingeniero",
+  "empresa": "TechCorp",
+  "vehiculo": true,
+  "placa": "ABC-123",
+  "marca": "Toyota",
+  "modelo": "Corolla",
+  "color": "Blanco",
+  "fecha_registro": "2024-01-15",
+  "estado": "activo",
+  "observaciones": "Propietario original del departamento"
+}
+```
+
+2.4 SEGURIDAD APLICADA:
+
+- Autenticación JWT: Token Bearer en cabecera Authorization
+- Validación de token en middleware de autenticación
+- Verificación de permisos del usuario
+- Sanitización de datos de entrada
+
+2.5 IMPLEMENTACIÓN EN CÓDIGO:
+
+```javascript
+// En Residentes.js - handleSubmit function
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  try {
+    setLoading(true);
+    if (editingResidente) {
+      await api.put(`/residentes/${editingResidente.id}`, formData);
+    } else {
+      await api.post('/residentes', formData);
+    }
+    setOpenModal(false);
+    setEditingResidente(null);
+    resetForm();
+    fetchResidentes();
+    fetchEstadisticas();
+  } catch (err) {
+    console.error('Error saving residente:', err);
+    setError('Error al guardar el residente');
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+================================================================================
+
+3. BACKEND - LÓGICA DE NEGOCIO
+================================================================================
+
+3.1 FLUJO JERÁRQUICO DE PROCESOS:
+
+A) Recepción de Solicitud
+   - Ubicación: /backend/src/routes/residentes.js
+   - Middleware de autenticación verifica JWT token
+   - Middleware de parsing extrae datos JSON del body
+
+B) Controlador Principal
+   - Ubicación: /backend/src/controllers/residenteController.js
+   - Función: createResidente()
+   - Proceso:
+     1. Extrae datos del request body
+     2. Agrega información del usuario autenticado (created_by, updated_by)
+     3. Valida datos de entrada
+     4. Verifica reglas de negocio
+     5. Llama al modelo para persistir datos
+     6. Retorna respuesta al frontend
+
+3.2 VALIDACIONES ADICIONALES EN BACKEND:
+
+```javascript
+// Verificación de documento único
+const existingResidente = await Residente.findOne({
+  where: { documento: residenteData.documento }
+});
+
+if (existingResidente) {
+  return res.status(400).json({ 
+    message: 'Ya existe un residente con este número de documento' 
+  });
+}
+```
+
+3.3 REGLAS DE NEGOCIO APLICADAS:
+
+- Documento debe ser único en el sistema
+- Fecha de registro no puede ser futura
+- Email debe tener formato válido (si se proporciona)
+- Tipo de residente debe ser uno de: 'propietario', 'inquilino', 'familiar'
+- Estado debe ser uno de: 'activo', 'inactivo', 'suspendido'
+- Departamento es obligatorio
+- Si tiene vehículo, debe proporcionar información del mismo
+
+3.4 PREPARACIÓN DE DATOS:
+
+```javascript
+const residenteData = {
+  ...req.body,
+  created_by: req.user.id,  // ID del usuario autenticado
+  updated_by: req.user.id,
+  fecha_registro: req.body.fecha_registro || new Date().toISOString().split('T')[0]
+};
+```
+
+================================================================================
+
+4. INTERACCIÓN BACKEND-BASE DE DATOS
+================================================================================
+
+4.1 MODELO SEQUELIZE:
+
+- Ubicación: /backend/src/models/Residente.js
+- Definición de esquema con validaciones
+- Configuración de relaciones con tabla usuarios
+
+4.2 OPERACIÓN DE PERSISTENCIA:
+
+```javascript
+// Creación del registro
+const residente = await Residente.create(residenteData);
+```
+
+4.3 CONSULTA SQL GENERADA:
+
+```sql
+INSERT INTO "residentes" (
+  "id", "nombre", "apellido_paterno", "apellido_materno", 
+  "documento", "tipo_documento", "email", "telefono", 
+  "departamento", "piso", "tipo_residente", "fecha_nacimiento", 
+  "ocupacion", "empresa", "vehiculo", "placa", "marca", 
+  "modelo", "color", "fecha_registro", "estado", "observaciones", 
+  "created_by", "updated_by", "created_at", "updated_at"
+) VALUES (
+  DEFAULT, 'Juan Carlos', 'García', 'López', '12345678', 
+  'DNI', 'juan.garcia@email.com', '999888777', '101', '1', 
+  'propietario', '1985-03-15', 'Ingeniero', 'TechCorp', 
+  true, 'ABC-123', 'Toyota', 'Corolla', 'Blanco', 
+  '2024-01-15', 'activo', 'Propietario original del departamento', 
+  2, 2, '2025-08-14 20:35:54.059+00', '2025-08-14 20:35:54.059+00'
+) RETURNING *;
+```
+
+4.4 MANEJO DE ERRORES:
+
+```javascript
+try {
+  const residente = await Residente.create(residenteData);
+  res.status(201).json(residente);
+} catch (error) {
+  if (error.name === 'SequelizeValidationError') {
+    return res.status(400).json({ 
+      message: 'Datos de validación incorrectos',
+      errors: error.errors.map(e => e.message)
+    });
+  }
+  if (error.name === 'SequelizeUniqueConstraintError') {
+    return res.status(400).json({ 
+      message: 'Ya existe un residente con este documento' 
+    });
+  }
+  res.status(500).json({ message: 'Error interno del servidor' });
+}
+```
+
+4.5 TRANSACCIONES:
+
+- Sequelize maneja transacciones automáticamente
+- Rollback automático en caso de error
+- Consistencia de datos garantizada
+
+================================================================================
+
+5. RESPUESTA Y RETROALIMENTACIÓN
+================================================================================
+
+5.1 RESPUESTA DEL BACKEND:
+
+A) Respuesta Exitosa (201 Created):
+```json
+{
+  "id": 6,
+  "nombre": "Juan Carlos",
+  "apellido_paterno": "García",
+  "apellido_materno": "López",
+  "documento": "12345678",
+  "tipo_documento": "DNI",
+  "email": "juan.garcia@email.com",
+  "telefono": "999888777",
+  "departamento": "101",
+  "piso": "1",
+  "tipo_residente": "propietario",
+  "fecha_nacimiento": "1985-03-15",
+  "ocupacion": "Ingeniero",
+  "empresa": "TechCorp",
+  "vehiculo": true,
+  "placa": "ABC-123",
+  "marca": "Toyota",
+  "modelo": "Corolla",
+  "color": "Blanco",
+  "fecha_registro": "2024-01-15",
+  "estado": "activo",
+  "observaciones": "Propietario original del departamento",
+  "created_by": 2,
+  "updated_by": 2,
+  "created_at": "2025-08-14T20:35:54.059Z",
+  "updated_at": "2025-08-14T20:35:54.059Z"
+}
+```
+
+B) Respuesta de Error (400 Bad Request):
+```json
+{
+  "message": "Ya existe un residente con este número de documento"
+}
+```
+
+5.2 PROCESAMIENTO EN FRONTEND:
+
+```javascript
+// En Residentes.js - handleSubmit function
+try {
+  const response = await api.post('/residentes', formData);
+  // Éxito: cerrar modal, limpiar formulario, actualizar lista
+  setOpenModal(false);
+  setEditingResidente(null);
+  resetForm();
+  fetchResidentes();  // Recargar lista
+  fetchEstadisticas(); // Actualizar estadísticas
+} catch (err) {
+  // Error: mostrar mensaje de error
+  setError('Error al guardar el residente');
+}
+```
+
+5.3 RETROALIMENTACIÓN VISUAL AL USUARIO:
+
+A) Éxito:
+- Modal se cierra automáticamente
+- Lista de residentes se actualiza
+- Estadísticas se recalculan
+- Mensaje de éxito (opcional)
+
+B) Error:
+- Modal permanece abierto
+- Mensaje de error se muestra en pantalla
+- Formulario mantiene datos ingresados
+- Usuario puede corregir y reintentar
+
+5.4 ACTUALIZACIÓN DE INTERFAZ:
+
+1. Se cierra el modal de registro
+2. Se limpia el formulario
+3. Se recarga la lista de residentes desde el servidor
+4. Se actualizan las estadísticas en las tarjetas
+5. El nuevo residente aparece en la primera posición de la tabla
+6. Se mantiene el estado de filtros y paginación
+
+================================================================================
+
+6. FLUJO COMPLETO RESUMIDO
+================================================================================
+
+1. USUARIO → Hace clic en "Nuevo Residente"
+2. FRONTEND → Abre modal con formulario vacío
+3. USUARIO → Completa formulario y hace clic en "Crear"
+4. FRONTEND → Valida datos y envía POST a /api/residentes
+5. BACKEND → Middleware autentica JWT token
+6. BACKEND → Controlador valida datos y reglas de negocio
+7. BACKEND → Modelo Sequelize ejecuta INSERT en PostgreSQL
+8. BACKEND → Retorna respuesta con datos del residente creado
+9. FRONTEND → Procesa respuesta exitosa
+10. FRONTEND → Cierra modal, limpia formulario, actualiza lista
+11. USUARIO → Ve el nuevo residente en la tabla actualizada
+
+================================================================================
+
+7. ARCHIVOS INVOLUCRADOS
+================================================================================
+
+FRONTEND:
+- /frontend/src/components/residentes/Residentes.js
+- /frontend/src/components/Layout.js
+- /frontend/src/App.js
+- /frontend/src/utils/api.js
+
+BACKEND:
+- /backend/src/routes/residentes.js
+- /backend/src/controllers/residenteController.js
+- /backend/src/models/Residente.js
+- /backend/src/middleware/auth.js
+- /backend/src/models/index.js
+
+BASE DE DATOS:
+- Tabla: residentes
+- Relaciones: usuarios (created_by, updated_by)
+
+================================================================================
+
+8. CONSIDERACIONES DE SEGURIDAD
+================================================================================
+
+- Autenticación JWT obligatoria
+- Validación de permisos de usuario
+- Sanitización de datos de entrada
+- Validación de tipos de datos
+- Verificación de unicidad de documentos
+- Logs de auditoría (created_by, updated_by)
+- Manejo seguro de errores (no exponer detalles internos)
+
+================================================================================
