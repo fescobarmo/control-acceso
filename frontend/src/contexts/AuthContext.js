@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import api from '../utils/api';
+import firebaseAuthService from '../services/firebaseAuth';
 
 const AuthContext = createContext();
 
@@ -18,74 +18,141 @@ export const AuthProvider = ({ children }) => {
 
   // Obtener usuario actual al cargar la aplicación
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      getCurrentUser();
-    } else {
-      setLoading(false);
-    }
+    const initAuth = async () => {
+      try {
+        // Wait for Firebase auth to initialize
+        await firebaseAuthService.waitForAuthInit();
+        
+        // Set up auth state listener
+        const unsubscribe = firebaseAuthService.onAuthStateChange(async (firebaseUser) => {
+          if (firebaseUser) {
+            // Get user profile data
+            const userProfile = await firebaseAuthService.getUserProfile(firebaseUser.uid);
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              ...userProfile
+            });
+          } else {
+            setUser(null);
+          }
+          setLoading(false);
+        });
+
+        // Return cleanup function
+        return unsubscribe;
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        setLoading(false);
+      }
+    };
+
+    initAuth();
   }, []);
 
   const getCurrentUser = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setLoading(false);
-        return;
+      const currentUser = firebaseAuthService.getCurrentUser();
+      if (currentUser) {
+        const userProfile = await firebaseAuthService.getUserProfile(currentUser.uid);
+        return {
+          uid: currentUser.uid,
+          email: currentUser.email,
+          displayName: currentUser.displayName,
+          ...userProfile
+        };
       }
-
-      // Configurar el token en el header de autorización
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      const response = await api.get('/auth/me');
-      if (response.data.success) {
-        setUser(response.data.user);
-      } else {
-        localStorage.removeItem('token');
-        delete api.defaults.headers.common['Authorization'];
-      }
+      return null;
     } catch (error) {
       console.error('Error obteniendo usuario actual:', error);
-      localStorage.removeItem('token');
-      delete api.defaults.headers.common['Authorization'];
       setError('Error al obtener información del usuario');
+      return null;
+    }
+  };
+
+  const login = async (email, password) => {
+    try {
+      setError(null);
+      setLoading(true);
+      
+      const user = await firebaseAuthService.signIn(email, password);
+      
+      return { success: true, user };
+    } catch (error) {
+      const message = error.message || 'Error en el inicio de sesión';
+      setError(message);
+      return { success: false, message };
     } finally {
       setLoading(false);
     }
   };
 
-  const login = async (username, password) => {
+  const register = async (email, password, userData) => {
     try {
       setError(null);
-      const response = await api.post('/auth/login', { username, password });
+      setLoading(true);
       
-      if (response.data.success) {
-        const { token, user } = response.data;
-        localStorage.setItem('token', token);
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        setUser(user);
-        return { success: true };
-      } else {
-        setError(response.data.message);
-        return { success: false, message: response.data.message };
-      }
+      const user = await firebaseAuthService.createUser(email, password, userData);
+      
+      return { success: true, user };
     } catch (error) {
-      const message = error.response?.data?.message || 'Error en el inicio de sesión';
+      const message = error.message || 'Error en el registro';
       setError(message);
       return { success: false, message };
+    } finally {
+      setLoading(false);
     }
   };
 
   const logout = async () => {
     try {
-      await api.post('/auth/logout');
+      setError(null);
+      await firebaseAuthService.signOut();
     } catch (error) {
       console.error('Error en logout:', error);
-    } finally {
-      localStorage.removeItem('token');
-      delete api.defaults.headers.common['Authorization'];
-      setUser(null);
+      setError('Error al cerrar sesión');
+    }
+  };
+
+  const updateProfile = async (updates) => {
+    try {
       setError(null);
+      if (user?.uid) {
+        await firebaseAuthService.updateUserProfile(user.uid, updates);
+        // Update local state
+        setUser(prev => ({ ...prev, ...updates }));
+        return { success: true };
+      }
+      return { success: false, message: 'No hay usuario autenticado' };
+    } catch (error) {
+      const message = error.message || 'Error al actualizar perfil';
+      setError(message);
+      return { success: false, message };
+    }
+  };
+
+  const resetPassword = async (email) => {
+    try {
+      setError(null);
+      await firebaseAuthService.sendPasswordReset(email);
+      return { success: true };
+    } catch (error) {
+      const message = error.message || 'Error al enviar email de recuperación';
+      setError(message);
+      return { success: false, message };
+    }
+  };
+
+  const changePassword = async (currentPassword, newPassword) => {
+    try {
+      setError(null);
+      await firebaseAuthService.updatePassword(currentPassword, newPassword);
+      return { success: true };
+    } catch (error) {
+      const message = error.message || 'Error al cambiar contraseña';
+      setError(message);
+      return { success: false, message };
     }
   };
 
@@ -94,8 +161,12 @@ export const AuthProvider = ({ children }) => {
     loading,
     error,
     login,
+    register,
     logout,
     getCurrentUser,
+    updateProfile,
+    resetPassword,
+    changePassword,
     isAuthenticated: !!user
   };
 

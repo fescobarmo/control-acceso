@@ -18,12 +18,15 @@ import {
 
 const Login = () => {
   const [credentials, setCredentials] = useState({
-    username: '',
+    email: '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [message, setMessage] = useState('');
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, resetPassword, error } = useAuth();
 
   const handleChange = (e) => {
     setCredentials({
@@ -35,14 +38,40 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setMessage('');
     
     try {
-      const result = await login(credentials.username, credentials.password);
+      const result = await login(credentials.email, credentials.password);
       if (result.success) {
         navigate('/dashboard');
+      } else {
+        setMessage(result.message || 'Error en el inicio de sesión');
       }
     } catch (error) {
       console.error('Error en login:', error);
+      setMessage('Error en el inicio de sesión');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage('');
+    
+    try {
+      const result = await resetPassword(resetEmail);
+      if (result.success) {
+        setMessage('Email de recuperación enviado. Revisa tu bandeja de entrada.');
+        setShowResetPassword(false);
+        setResetEmail('');
+      } else {
+        setMessage(result.message || 'Error al enviar email de recuperación');
+      }
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      setMessage('Error al enviar email de recuperación');
     } finally {
       setLoading(false);
     }
@@ -153,9 +182,10 @@ const Login = () => {
               <Box component="form" onSubmit={handleSubmit}>
                 <TextField
                   fullWidth
-                  placeholder="Usuario"
-                  name="username"
-                  value={credentials.username}
+                  placeholder="Email"
+                  name="email"
+                  type="email"
+                  value={credentials.email}
                   onChange={handleChange}
                   variant="standard"
                   required
@@ -199,6 +229,24 @@ const Login = () => {
                   }}
                 />
                 
+                {/* Show error or success message */}
+                {(message || error) && (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        color: message?.includes('enviado') ? 'green' : 'red',
+                        textAlign: 'center',
+                        backgroundColor: message?.includes('enviado') ? '#e8f5e8' : '#ffeaea',
+                        padding: 1,
+                        borderRadius: 1
+                      }}
+                    >
+                      {message || error}
+                    </Typography>
+                  </Box>
+                )}
+                
                 <Box sx={{ textAlign: 'right', mb: 3 }}>
                   <Typography 
                     variant="body2" 
@@ -207,10 +255,80 @@ const Login = () => {
                       cursor: 'pointer',
                       '&:hover': { textDecoration: 'underline' }
                     }}
+                    onClick={() => setShowResetPassword(true)}
                   >
                     ¿Olvidaste tu contraseña?
                   </Typography>
                 </Box>
+
+                {/* Reset Password Modal */}
+                {showResetPassword && (
+                  <Box sx={{ 
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
+                  }}>
+                    <Box sx={{
+                      backgroundColor: 'white',
+                      padding: 4,
+                      borderRadius: 2,
+                      maxWidth: 400,
+                      width: '90%',
+                      maxHeight: '90vh',
+                      overflow: 'auto'
+                    }}>
+                      <Typography variant="h6" sx={{ mb: 2, textAlign: 'center' }}>
+                        Recuperar Contraseña
+                      </Typography>
+                      
+                      <Typography variant="body2" sx={{ mb: 3, color: 'grey.600' }}>
+                        Ingresa tu email y te enviaremos un enlace para restablecer tu contraseña.
+                      </Typography>
+                      
+                      <Box component="form" onSubmit={handleResetPassword}>
+                        <TextField
+                          fullWidth
+                          placeholder="Email"
+                          type="email"
+                          value={resetEmail}
+                          onChange={(e) => setResetEmail(e.target.value)}
+                          variant="outlined"
+                          required
+                          sx={{ mb: 3 }}
+                        />
+                        
+                        <Box sx={{ display: 'flex', gap: 2 }}>
+                          <Button
+                            variant="outlined"
+                            fullWidth
+                            onClick={() => {
+                              setShowResetPassword(false);
+                              setResetEmail('');
+                              setMessage('');
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            type="submit"
+                            variant="contained"
+                            fullWidth
+                            disabled={loading}
+                          >
+                            {loading ? 'Enviando...' : 'Enviar'}
+                          </Button>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Box>
+                )}
                 
                 <Button
                   type="submit"

@@ -1,0 +1,27 @@
+{
+  "name": "controlacceso-migration",
+  "version": "1.0.0",
+  "description": "Migration scripts for ControlAcceso to Firebase",
+  "main": "migrate-to-firestore.js",
+  "scripts": {
+    "migrate": "node migrate-to-firestore.js",
+    "migrate:users": "node -e \"require('./migrate-to-firestore').migrateUsers()\"",
+    "migrate:residentes": "node -e \"require('./migrate-to-firestore').migrateResidentes()\"",
+    "migrate:visitas": "node -e \"require('./migrate-to-firestore').migrateVisitas()\"",
+    "migrate:visitas-externas": "node -e \"require('./migrate-to-firestore').migrateVisitasExternas()\""
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "pg": "^8.16.3",
+    "dotenv": "^16.0.3"
+  },
+  "keywords": [
+    "firebase",
+    "migration",
+    "postgresql",
+    "firestore"
+  ],
+  "author": "ControlAcceso Team",
+  "license": "MIT"
+}
+
